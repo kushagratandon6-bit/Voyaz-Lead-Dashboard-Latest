@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Voyaz Leads — Live Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --green:#22C55E; --green-dark:#16A34A; --dark:#1F1F1F; --bg:#FFFFFF;
+  --card:#FFFFFF; --border:#E7EBE9; --muted:#6B7280; --red:#EF4444; --amber:#B45309;
+  --radius:14px; --gap:16px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--dark);}
+.wrap{max-width:1400px;margin:0 auto;padding:20px;}
+
+#gate{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;z-index:999;}
+#gate .box{background:#fff;border:1px solid var(--border);box-shadow:0 4px 24px rgba(0,0,0,.08);padding:32px 36px;border-radius:var(--radius);text-align:center;width:320px;}
+#gate h2{margin:0 0 6px;font-size:18px;}
+#gate p{margin:0 0 16px;color:var(--muted);font-size:13px;}
+#gate input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;margin-bottom:10px;}
+#gate button{width:100%;padding:10px;border:none;border-radius:8px;background:var(--green);color:#fff;font-weight:700;font-size:14px;cursor:pointer;}
+#gate .err{color:var(--red);font-size:12px;height:16px;margin-top:4px;}
+
+.header{background:#fff;color:var(--dark);border:1px solid var(--border);border-bottom:3px solid var(--green);padding:20px 24px;border-radius:var(--radius);margin-bottom:var(--gap);
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;}
+.header h1{font-size:19px;margin:0;font-weight:700;}
+.header .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+.live{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;animation:pulse 1.8s infinite;}
+.dot.bad{background:var(--red);animation:none;}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
+.live-text{font-size:12px;color:var(--muted);}
+.btn{border:none;border-radius:8px;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.btn-green{background:var(--green);color:#fff;} .btn-green:hover{background:var(--green-dark);}
+.btn-ghost{background:#fff;border:1px solid var(--border);color:var(--dark);} .btn-ghost:hover{background:#f2f4f3;}
+.btn-outline{background:#fff;border:1px solid var(--border);color:var(--dark);} .btn-outline:hover{background:#f2f4f3;}
+
+.banner{border-radius:var(--radius);padding:12px 16px;margin-bottom:var(--gap);font-size:13px;display:none;}
+.banner.err{display:block;background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;}
+.banner.warn{display:block;background:#FFFBEB;border:1px solid #FDE68A;color:var(--amber);}
+.banner code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px;font-size:12px;}
+
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:var(--gap);margin-bottom:var(--gap);}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+.kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px;}
+.kpi .value{font-size:24px;font-weight:800;}
+.kpi.accent .value{color:var(--green-dark);}
+
+.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:var(--gap);}
+.filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;}
+.f-group{display:flex;flex-direction:column;gap:4px;}
+.f-group label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+.f-group input,.f-group select{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;min-width:130px;}
+.f-group input[type="search"]{min-width:200px;}
+.spacer{flex:1;}
+
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px;}
+thead th{text-align:left;padding:10px 12px;border-bottom:2px solid var(--border);color:var(--muted);
+  font-size:11px;text-transform:uppercase;letter-spacing:.4px;cursor:pointer;white-space:nowrap;user-select:none;}
+thead th:hover{color:var(--dark);}
+thead th.asc::after{content:" ▲";font-size:9px;} thead th.desc::after{content:" ▼";font-size:9px;}
+tbody td{padding:9px 12px;border-bottom:1px solid #F0F0F0;white-space:nowrap;}
+tbody tr:hover{background:#FAFBFA;}
+.badge{padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;}
+.b-new{background:rgba(34,197,94,.12);color:var(--green-dark);}
+.b-con{background:rgba(59,130,246,.12);color:#2563EB;}
+.b-oth{background:rgba(107,114,128,.12);color:var(--muted);}
+.editable{background:#FFFBEA;border:1px dashed #F0C43A;border-radius:6px;padding:4px 7px;min-width:80px;display:inline-block;cursor:text;}
+.editable:focus{outline:2px solid var(--green);background:#fff;}
+.editable.ov{background:#EAFBF0;border-color:var(--green);}
+.wa{color:var(--green-dark);text-decoration:none;font-weight:700;}
+.wa:hover{text-decoration:underline;}
+.empty{padding:40px;text-align:center;color:var(--muted);}
+.share-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px;}
+.hint{font-size:11px;color:var(--muted);margin-top:8px;}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--dark);color:#fff;padding:12px 18px;border-radius:10px;
+  font-size:13px;opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;z-index:500;}
+.toast.show{opacity:1;transform:translateY(0);}
+.tabs{display:flex;gap:8px;margin-bottom:var(--gap);}
+.tab{border:1px solid var(--border);background:#fff;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer;color:var(--muted);}
+.tab.on{background:var(--green);border-color:var(--green);color:#fff;}
+.tabpanel{display:none;} .tabpanel.on{display:block;}
+.chips{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{border:1px solid var(--border);background:#fff;border-radius:100px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;}
+.chip:hover{border-color:var(--green);} .chip.on{background:rgba(34,197,94,.12);border-color:var(--green);color:var(--green-dark);}
+table.c{min-width:640px;} td.n,th.n{text-align:right;}
+tfoot td{font-weight:800;background:#F1FBF5;border-top:2px solid var(--green);padding:10px 12px;}
+tr.crow{cursor:pointer;}
+.bar{height:6px;background:rgba(34,197,94,.15);border-radius:4px;min-width:80px;overflow:hidden;} .bar i{display:block;height:100%;background:var(--green);}
+.sharecell{display:flex;align-items:center;gap:8px;}
+@media (max-width:768px){.header{flex-direction:column;align-items:flex-start;}.kpi-row{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="box">
+    <h2>Voyaz Leads</h2>
+    <p>Enter passcode to view</p>
+    <input type="password" id="gate-input" placeholder="Passcode" autofocus>
+    <button onclick="checkPasscode()">Unlock</button>
+    <div class="err" id="gate-err"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="header">
+    <div>
+      <h1>Voyaz Leads — Live Dashboard</h1>
+      <div class="sub" id="source-line">Connecting…</div>
+    </div>
+    <div class="live">
+      <div><span class="dot" id="dot"></span><span class="live-text" id="status">Loading…</span></div>
+      <button class="btn btn-ghost" onclick="refreshData()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="tabs">
+    <button class="tab on" data-tab="leads" onclick="switchTab('leads')">Leads</button>
+    <button class="tab" data-tab="country" onclick="switchTab('country')">Country Summary</button>
+  </div>
+
+  <div class="tabpanel on" id="tab-leads">
+  <div class="kpi-row">
+    <div class="kpi"><div class="label">Total Leads</div><div class="value" id="k-total">—</div></div>
+    <div class="kpi"><div class="label">New</div><div class="value" id="k-new">—</div></div>
+    <div class="kpi"><div class="label">Contacted</div><div class="value" id="k-con">—</div></div>
+    <div class="kpi accent"><div class="label">Total Loan Value</div><div class="value" id="k-loan">—</div></div>
+    <div class="kpi accent"><div class="label">Avg EMI</div><div class="value" id="k-emi">—</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="filters">
+      <div class="f-group"><label>Search</label>
+        <input type="search" id="f-q" placeholder="Name, phone, destination…" oninput="render()"></div>
+      <div class="f-group"><label>Status</label>
+        <select id="f-status" onchange="render()"><option value="">All</option></select></div>
+      <div class="f-group"><label>Destination</label>
+        <select id="f-dest" onchange="render()"><option value="">All</option></select></div>
+      <div class="f-group"><label>Date From</label><input type="date" id="f-from" onchange="render()"></div>
+      <div class="f-group"><label>Date To</label><input type="date" id="f-to" onchange="render()"></div>
+      <div class="f-group"><label>&nbsp;</label><button class="btn btn-outline" onclick="clearFilters()">Clear filters</button></div>
+      <div class="spacer"></div>
+      <div class="f-group"><label>&nbsp;</label><button class="btn btn-outline" onclick="resetOverrides()">Reset local edits</button></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="table-wrap">
+      <table id="tbl">
+        <thead><tr>
+          <th data-k="name">Name</th>
+          <th data-k="phone">Phone</th>
+          <th data-k="destination">Destination</th>
+          <th data-k="status">Status</th>
+          <th data-k="dateObj">Date</th>
+          <th data-k="emiNum">EMI / month</th>
+          <th data-k="loanNum">Loan Amount</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty" style="display:none;">No leads match these filters.</div>
+    </div>
+
+    <div class="share-bar">
+      <button class="btn btn-green" onclick="exportExcel()">⬇ Export to Excel</button>
+      <button class="btn btn-outline" onclick="shareFile()">↗ Share (WhatsApp / Email / Apps)</button>
+      <button class="btn btn-outline" onclick="shareWhatsApp()">WhatsApp</button>
+      <button class="btn btn-outline" onclick="shareEmail()">Email</button>
+    </div>
+    <div class="hint">
+      EMI / Loan Amount cells with a yellow dashed border are editable — click to type a value. Edits save in this
+      browser only (never written back to the Sheet) and are included in exports. Leaving a cell blank always falls
+      back to the Sheet's own value.
+    </div>
+  </div>
+  </div><!-- /tab-leads -->
+
+  <div class="tabpanel" id="tab-country">
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Countries</div><div class="value" id="c-k-countries">—</div></div>
+      <div class="kpi"><div class="label">Total Leads</div><div class="value" id="c-k-total">—</div></div>
+      <div class="kpi accent"><div class="label">Top Country</div><div class="value" id="c-k-top" style="font-size:18px">—</div></div>
+      <div class="kpi"><div class="label">New</div><div class="value" id="c-k-new">—</div></div>
+      <div class="kpi"><div class="label">Contacted</div><div class="value" id="c-k-con">—</div></div>
+      <div class="kpi accent"><div class="label">Total Loan Value</div><div class="value" id="c-k-loan">—</div></div>
+    </div>
+    <div class="panel">
+      <div class="filters">
+        <div class="f-group"><label>Date From</label><input type="date" id="c-from" onchange="renderCountry()"></div>
+        <div class="f-group"><label>Date To</label><input type="date" id="c-to" onchange="renderCountry()"></div>
+        <div class="f-group"><label>Status</label><select id="c-status" onchange="renderCountry()"><option value="">All</option></select></div>
+        <div class="f-group"><label>Quick range</label>
+          <div class="chips">
+            <button class="chip" onclick="quickRange('today')">Today</button>
+            <button class="chip" onclick="quickRange('yesterday')">Yesterday</button>
+            <button class="chip" onclick="quickRange('7')">Last 7 days</button>
+            <button class="chip" onclick="quickRange('30')">Last 30 days</button>
+            <button class="chip" onclick="quickRange('month')">This month</button>
+            <button class="chip" onclick="quickRange('all')">All time</button>
+          </div></div>
+        <div class="spacer"></div>
+        <div class="f-group"><label>View</label>
+          <div class="chips"><button class="chip on" id="cv-total" onclick="setCView('total')">Country totals</button>
+          <button class="chip" id="cv-day" onclick="setCView('day')">Date × Country</button></div></div>
+        <div class="f-group"><label>&nbsp;</label><button class="btn btn-green" onclick="exportCountryExcel()">⬇ Export Summary</button></div>
+      </div>
+      <div class="hint" id="c-note"></div>
+    </div>
+    <div class="panel">
+      <div class="table-wrap" id="c-wrap-total"><table class="c">
+        <thead><tr>
+          <th data-ck="country">Country</th><th class="n" data-ck="leads">Leads</th><th data-ck="leads">Share</th>
+          <th class="n" data-ck="nw">New</th><th class="n" data-ck="con">Contacted</th><th class="n" data-ck="oth">Other</th>
+          <th class="n" data-ck="loan">Loan Value</th><th class="n" data-ck="emi">Avg EMI</th><th data-ck="last">Latest Lead</th>
+        </tr></thead>
+        <tbody id="c-tbody"></tbody><tfoot id="c-tfoot"></tfoot></table></div>
+      <div class="table-wrap" id="c-wrap-day" style="display:none"><table class="c">
+        <thead><tr id="c-day-head"></tr></thead><tbody id="c-day-body"></tbody><tfoot id="c-day-foot"></tfoot></table></div>
+      <div class="empty" id="c-empty" style="display:none;">No leads in this date range.</div>
+      <div class="hint">Click a country row to open its leads in the Leads tab with the same dates.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════ CONFIG ═══════════════ */
+const CONFIG = {
+  SHEET_ID: '1fDCeNJ5MzbImDmERilchke0FHtIR5fLW8DQS10psuqI',
+  GID: '0',                    // the Leads tab
+  SHEET_TAB: 'Leads',
+  PUBLISHED_CSV_URL: '',       // optional: paste your File > Share > Publish to web CSV link here
+  REFRESH_INTERVAL_MS: 60000,
+  PASSCODE: 'voyaz2026'        // change before sharing the link
+};
+
+/* Data sources, tried in order. The first two return the sheet EXACTLY as
+   displayed (text stays text, "1,05,000" survives). gviz is last because it
+   type-infers each column and silently blanks any cell that doesn't match
+   the column's inferred type — that's what was eating the loan amounts. */
+function buildSources(){
+  const t = Date.now(), s = [];
+  if (CONFIG.PUBLISHED_CSV_URL){
+    s.push({ name:'Published CSV', lossy:false,
+      url: CONFIG.PUBLISHED_CSV_URL + (CONFIG.PUBLISHED_CSV_URL.includes('?') ? '&' : '?') + '_=' + t });
+  }
+  s.push({ name:'Sheet export CSV', lossy:false,
+    url:`https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/export?format=csv&gid=${CONFIG.GID}&_=${t}` });
+  s.push({ name:'gviz CSV (fallback)', lossy:true,
+    url:`https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(CONFIG.SHEET_TAB)}&_=${t}` });
+  return s;
+}
+
+/* ═══════════════ Passcode ═══════════════ */
+function checkPasscode(){
+  if (document.getElementById('gate-input').value === CONFIG.PASSCODE){
+    document.getElementById('gate').style.display='none';
+    sessionStorage.setItem('voyaz_unlocked','1');
+  } else document.getElementById('gate-err').textContent='Incorrect passcode';
+}
+document.getElementById('gate-input').addEventListener('keydown', e=>{ if(e.key==='Enter') checkPasscode(); });
+if (!CONFIG.PASSCODE || sessionStorage.getItem('voyaz_unlocked')==='1')
+  document.getElementById('gate').style.display='none';
+
+/* ═══════════════ State ═══════════════ */
+let ROWS = [];
+let sortKey = 'dateObj', sortDir = 'desc';
+const OV_KEY = 'voyazLeadOverrides';
+
+function getOv(){ try{ return JSON.parse(localStorage.getItem(OV_KEY)||'{}'); }catch(e){ return {}; } }
+function setOv(key, field, value){
+  const o = getOv();
+  o[key] = o[key] || {};
+  if (value === '' || value == null){ delete o[key][field]; if(!Object.keys(o[key]).length) delete o[key]; }
+  else o[key][field] = value;
+  localStorage.setItem(OV_KEY, JSON.stringify(o));
+}
+function resetOverrides(){
+  if (confirm('Clear all locally-edited EMI / Loan Amount values on this device?')){
+    localStorage.removeItem(OV_KEY); refreshData(); toast('Local edits cleared');
+  }
+}
+
+/* ═══════════════ Parsing ═══════════════ */
+// Fuzzy header matching so a renamed/extra-spaced column doesn't break anything.
+function mapHeaders(fields){
+  const m = {};
+  (fields||[]).forEach(f=>{
+    const k = String(f).trim().toLowerCase();
+    if (!k) return;
+    if (!m.phone       && /phone|mobile|whatsapp|contact\s*(no|number)?$/.test(k)) m.phone = f;
+    else if (!m.name        && /^name|full\s*name|customer/.test(k))                    m.name = f;
+    else if (!m.destination && /destination|country|city|place/.test(k))                m.destination = f;
+    else if (!m.status      && /status|stage/.test(k))                                  m.status = f;
+    else if (!m.date        && /date|time|stamp/.test(k))                               m.date = f;
+    else if (!m.emi         && /emi|per\s*month|monthly/.test(k))                       m.emi = f;
+    else if (!m.loan        && /loan|amount|total|budget|package/.test(k))              m.loan = f;
+  });
+  return m;
+}
+
+function parseDate(v){
+  if (v == null) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  const s = String(v).trim();
+  if (!s) return null;
+  // gviz style: Date(2026,8,12,0,44,15) — month is 0-indexed
+  let m = s.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/);
+  if (m) return new Date(+m[1], +m[2], +m[3], +(m[4]||0), +(m[5]||0), +(m[6]||0));
+  // Sheet style: 12/9/2026, 12:44:15 AM  (day/month/year, 12h or 24h, optional time)
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?)?$/);
+  if (m){
+    let h = m[4] !== undefined ? +m[4] : 0;
+    const ap = (m[7]||'').toUpperCase();
+    if (ap === 'PM' && h !== 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    return new Date(+m[3], +m[2]-1, +m[1], h, +(m[5]||0), +(m[6]||0));
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Handles 90000 | "1,05,000" | "₹2,499" | "₹2,499/month" | 2499 (number)
+function parseAmount(v){
+  if (v == null) return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  let s = String(v).trim();
+  if (!s) return null;
+  s = s.replace(/\/\s*(month|mo|m)\b.*$/i,'').replace(/[₹$,\s]/g,'').replace(/[^0-9.\-]/g,'');
+  if (!s) return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function fmtINR(n){
+  if (n == null || isNaN(n)) return '—';
+  return '₹' + Math.round(n).toLocaleString('en-IN');
+}
+function fmtDate(d){
+  if (!d) return '—';
+  return d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) + ' · ' +
+         d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+}
+
+/* Turn parsed CSV into row objects. Exposed for self-test. */
+function buildRows(parsed){
+  const cols = mapHeaders(parsed.meta && parsed.meta.fields);
+  const ov = getOv();
+  const rows = (parsed.data||[]).map(r=>{
+    const get = c => (cols[c] !== undefined && r[cols[c]] !== undefined && r[cols[c]] !== null)
+      ? String(r[cols[c]]).trim() : '';
+    const phone = get('phone'), dateStr = get('date');
+    const key = phone + '__' + dateStr;
+    const o = ov[key] || {};
+    // Blank override never masks a real sheet value.
+    const emiRaw  = (o.emi  != null && o.emi  !== '') ? o.emi  : get('emi');
+    const loanRaw = (o.loan != null && o.loan !== '') ? o.loan : get('loan');
+    return {
+      key, phone,
+      name: get('name') || 'Awaiting Name',
+      destination: get('destination') || '—',
+      status: get('status') || '—',
+      date: dateStr,
+      dateObj: parseDate(dateStr),
+      emiRaw,  emiNum: parseAmount(emiRaw),   emiOv: o.emi  != null && o.emi  !== '',
+      loanRaw, loanNum: parseAmount(loanRaw), loanOv: o.loan != null && o.loan !== ''
+    };
+  }).filter(r => r.phone || (r.name && r.name !== 'Awaiting Name'));
+  return { rows, cols };
+}
+
+/* ═══════════════ Fetch with fallback chain ═══════════════ */
+async function refreshData(){
+  const srcs = buildSources();
+  const tried = [];
+  for (const src of srcs){
+    try{
+      const res = await fetch(src.url, {redirect:'follow'});
+      if (!res.ok){ tried.push(src.name+' → HTTP '+res.status); continue; }
+      const text = await res.text();
+      if (/^\s*</.test(text)){ tried.push(src.name+' → got a login page, not CSV'); continue; }
+      const parsed = Papa.parse(text, {header:true, skipEmptyLines:true});
+      const {rows, cols} = buildRows(parsed);
+      if (!rows.length){ tried.push(src.name+' → 0 usable rows'); continue; }
+      ROWS = rows;
+      onLoaded(src, cols, rows);
+      return;
+    }catch(e){ tried.push(src.name+' → '+(e.message||e)); }
+  }
+  showError(tried);
+}
+
+function onLoaded(src, cols, rows){
+  document.getElementById('dot').classList.remove('bad');
+  document.getElementById('status').textContent = 'Live · updated ' + new Date().toLocaleTimeString('en-IN');
+  document.getElementById('source-line').textContent = 'Source: ' + src.name + ' · ' + rows.length + ' leads';
+
+  const missing = ['phone','name','destination','status','date','emi','loan'].filter(c=>!cols[c]);
+  const blankLoan = rows.filter(r=>r.loanNum==null).length;
+  const blankEmi  = rows.filter(r=>r.emiNum==null).length;
+  const msgs = [];
+  if (missing.length) msgs.push('Column(s) not found in the sheet: <b>'+missing.join(', ')+'</b>.');
+  if (src.lossy && (blankLoan || blankEmi))
+    msgs.push('Using the <b>gviz fallback</b>, which blanks cells that don\'t match a column\'s inferred type. '+
+              'Publish the sheet to the web (File → Share → Publish to web → Leads → CSV) and paste that link into '+
+              '<code>PUBLISHED_CSV_URL</code> at the top of this file for exact values.');
+  else if (blankLoan || blankEmi)
+    msgs.push((blankLoan?blankLoan+' lead(s) have no Loan Amount. ':'') +
+              (blankEmi?blankEmi+' lead(s) have no EMI. ':'') + 'These cells are empty in the sheet itself.');
+  const b = document.getElementById('banner');
+  b.className = 'banner' + (msgs.length ? (missing.length||src.lossy ? ' warn' : ' warn') : '');
+  b.innerHTML = msgs.join('<br>');
+  if (!msgs.length) b.className = 'banner';
+
+  fillFilterOptions();
+  render();
+}
+
+function showError(tried){
+  document.getElementById('dot').classList.add('bad');
+  document.getElementById('status').textContent = 'Could not load data';
+  document.getElementById('source-line').textContent = 'No source reachable';
+  const b = document.getElementById('banner');
+  b.className = 'banner err';
+  b.innerHTML = '<b>Could not read the sheet.</b> Make sure it is shared as “Anyone with the link → Viewer”.<br>' +
+    'Tried:<br>' + tried.map(t=>'• '+t).join('<br>');
+}
+
+/* ═══════════════ Filters / render ═══════════════ */
+function fillFilterOptions(){
+  const ss = document.getElementById('f-status'), ds = document.getElementById('f-dest');
+  const cs = ss.value, cd = ds.value;
+  const st = [...new Set(ROWS.map(r=>r.status))].sort();
+  const de = [...new Set(ROWS.map(r=>r.destination))].sort();
+  ss.innerHTML = '<option value="">All</option>' + st.map(s=>`<option>${s}</option>`).join('');
+  ds.innerHTML = '<option value="">All</option>' + de.map(d=>`<option>${d}</option>`).join('');
+  ss.value = cs; ds.value = cd;
+  const cst = document.getElementById('c-status'), cc = cst.value;
+  cst.innerHTML = '<option value="">All</option>' + st.map(x=>`<option>${x}</option>`).join(''); cst.value = cc;
+}
+
+function filtered(){
+  const q = document.getElementById('f-q').value.trim().toLowerCase();
+  const st = document.getElementById('f-status').value;
+  const de = document.getElementById('f-dest').value;
+  const fv = document.getElementById('f-from').value, tv = document.getElementById('f-to').value;
+  const from = fv ? new Date(fv+'T00:00:00') : null, to = tv ? new Date(tv+'T23:59:59') : null;
+
+  let out = ROWS.filter(r=>{
+    if (st && r.status !== st) return false;
+    if (de && r.destination !== de) return false;
+    if (from && (!r.dateObj || r.dateObj < from)) return false;
+    if (to && (!r.dateObj || r.dateObj > to)) return false;
+    if (q && !(r.name+' '+r.phone+' '+r.destination+' '+r.status).toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  out.sort((a,b)=>{
+    let av=a[sortKey], bv=b[sortKey];
+    if (av instanceof Date || bv instanceof Date){ av=av?av.getTime():-Infinity; bv=bv?bv.getTime():-Infinity; }
+    else if (typeof av==='number' || typeof bv==='number'){ av=av??-Infinity; bv=bv??-Infinity; }
+    else { av=String(av||'').toLowerCase(); bv=String(bv||'').toLowerCase(); }
+    if (av<bv) return sortDir==='asc'?-1:1;
+    if (av>bv) return sortDir==='asc'?1:-1;
+    return 0;
+  });
+  return out;
+}
+
+function clearFilters(){
+  ['f-q','f-status','f-dest','f-from','f-to'].forEach(id=>document.getElementById(id).value='');
+  render();
+}
+
+function badge(s){
+  const u=(s||'').toUpperCase();
+  return u==='NEW' ? 'b-new' : u==='CONTACTED' ? 'b-con' : 'b-oth';
+}
+
+function render(){
+  const rows = filtered();
+  renderCountry();
+  document.getElementById('k-total').textContent = rows.length;
+  document.getElementById('k-new').textContent = rows.filter(r=>(r.status||'').toUpperCase()==='NEW').length;
+  document.getElementById('k-con').textContent = rows.filter(r=>(r.status||'').toUpperCase()==='CONTACTED').length;
+  document.getElementById('k-loan').textContent = fmtINR(rows.reduce((s,r)=>s+(r.loanNum||0),0));
+  const e = rows.map(r=>r.emiNum).filter(v=>v!=null);
+  document.getElementById('k-emi').textContent = e.length ? fmtINR(e.reduce((a,b)=>a+b,0)/e.length) : '—';
+
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '';
+  document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
+
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    const wa = r.phone ? `<a class="wa" target="_blank" href="https://wa.me/${r.phone.replace(/\D/g,'')}">${r.phone}</a>` : '—';
+    tr.innerHTML =
+      `<td>${r.name}</td><td>${wa}</td><td>${r.destination}</td>`+
+      `<td><span class="badge ${badge(r.status)}">${r.status}</span></td>`+
+      `<td>${fmtDate(r.dateObj)}</td>`+
+      `<td><span class="editable ${r.emiOv?'ov':''}" contenteditable="true" data-key="${r.key}" data-f="emi">${r.emiRaw||''}</span></td>`+
+      `<td><span class="editable ${r.loanOv?'ov':''}" contenteditable="true" data-key="${r.key}" data-f="loan">${r.loanRaw||''}</span></td>`;
+    tb.appendChild(tr);
+  });
+
+  tb.querySelectorAll('.editable').forEach(el=>{
+    el.addEventListener('blur', ()=>{
+      setOv(el.dataset.key, el.dataset.f, el.textContent.trim());
+      refreshData();
+    });
+  });
+
+  document.querySelectorAll('#tbl thead th').forEach(th=>{
+    th.classList.toggle('asc', th.dataset.k===sortKey && sortDir==='asc');
+    th.classList.toggle('desc', th.dataset.k===sortKey && sortDir==='desc');
+  });
+}
+
+document.querySelectorAll('#tbl thead th').forEach(th=>{
+  th.addEventListener('click', ()=>{
+    const k = th.dataset.k;
+    if (sortKey===k) sortDir = sortDir==='asc'?'desc':'asc'; else { sortKey=k; sortDir='asc'; }
+    render();
+  });
+});
+
+/* ═══════════════ Export / share ═══════════════ */
+function exportRows(){
+  return filtered().map(r=>({
+    Name:r.name, Phone:r.phone, Destination:r.destination, Status:r.status,
+    Date:r.date, 'EMI / month':r.emiRaw||'', 'Loan Amount':r.loanRaw||''
+  }));
+}
+function workbookBlob(){
+  const ws = XLSX.utils.json_to_sheet(exportRows());
+  ws['!cols'] = [{wch:20},{wch:15},{wch:16},{wch:12},{wch:22},{wch:12},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Voyaz Leads');
+  return new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array'})],
+    {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+function exportExcel(){
+  const url = URL.createObjectURL(workbookBlob());
+  const a = document.createElement('a');
+  a.href = url; a.download = `voyaz-leads-${new Date().toISOString().slice(0,10)}.xlsx`; a.click();
+  URL.revokeObjectURL(url); toast('Excel file downloaded');
+}
+async function shareFile(){
+  const file = new File([workbookBlob()], `voyaz-leads-${new Date().toISOString().slice(0,10)}.xlsx`,
+    {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  if (navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:'Voyaz Leads'}); return; }catch(e){}
+  }
+  exportExcel(); toast('Downloaded — attach it in WhatsApp/Email manually');
+}
+function shareWhatsApp(){
+  window.open('https://wa.me/?text='+encodeURIComponent(
+    `Voyaz Leads snapshot (${filtered().length} leads, ${new Date().toLocaleDateString('en-IN')})`),'_blank');
+  exportExcel();
+}
+function shareEmail(){
+  window.location.href = 'mailto:?subject='+encodeURIComponent('Voyaz Leads — '+new Date().toLocaleDateString('en-IN'))+
+    '&body='+encodeURIComponent(`Attached: Voyaz leads export (${filtered().length} leads).`);
+  exportExcel();
+}
+function toast(m){
+  const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+/* ═══════════════ Country Summary ═══════════════ */
+let cView='total', cSortKey='leads', cSortDir='desc';
+const ymd = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const dStart = v => new Date(v+'T00:00:00'), dEnd = v => new Date(v+'T23:59:59.999');
+const shortD = d => d ? d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—';
+function cName(r){
+  let s = String(r.destination||'').replace(/\s+/g,' ').trim();
+  if (!s || s==='—') return 'Not specified';
+  return s.length<=4 && s===s.toUpperCase() ? s : s.toLowerCase().replace(/(^|[\s\-\/(])([a-z])/g,(m,a,b)=>a+b.toUpperCase());
+}
+function countryRows(){
+  const fv=document.getElementById('c-from').value, tv=document.getElementById('c-to').value, st=document.getElementById('c-status').value;
+  const from=fv?dStart(fv):null, to=tv?dEnd(tv):null;
+  return ROWS.filter(r=>{
+    if (st && r.status!==st) return false;
+    if (from && (!r.dateObj || r.dateObj<from)) return false;
+    if (to && (!r.dateObj || r.dateObj>to)) return false;
+    return true;
+  });
+}
+function groupByCountry(rows){
+  const m=new Map();
+  rows.forEach(r=>{
+    const n=cName(r); let g=m.get(n);
+    if(!g){ g={country:n,leads:0,nw:0,con:0,oth:0,loan:0,es:0,en:0,last:null}; m.set(n,g); }
+    g.leads++; const u=(r.status||'').toUpperCase();
+    if(u==='NEW') g.nw++; else if(u==='CONTACTED') g.con++; else g.oth++;
+    g.loan+=r.loanNum||0; if(r.emiNum!=null){ g.es+=r.emiNum; g.en++; }
+    if(r.dateObj && (!g.last||r.dateObj>g.last)) g.last=r.dateObj;
+  });
+  return [...m.values()].map(g=>({...g,emi:g.en?g.es/g.en:null}));
+}
+function dayMatrix(rows,groups){
+  const countries=groups.slice().sort((a,b)=>b.leads-a.leads||a.country.localeCompare(b.country)).map(g=>g.country);
+  const days=new Map();
+  rows.forEach(r=>{
+    const k=r.dateObj?ymd(r.dateObj):'none';
+    let d=days.get(k);
+    if(!d){ d={ts:r.dateObj?dStart(k).getTime():-1,label:r.dateObj?r.dateObj.toLocaleDateString('en-IN',{weekday:'short',day:'2-digit',month:'short',year:'numeric'}):'No date',c:{},total:0}; days.set(k,d); }
+    const n=cName(r); d.c[n]=(d.c[n]||0)+1; d.total++;
+  });
+  return {countries,list:[...days.values()].sort((a,b)=>b.ts-a.ts)};
+}
+function renderCountry(){
+  if(!document.getElementById('c-tbody')) return;
+  const rows=countryRows(), groups=groupByCountry(rows), total=rows.length, $=id=>document.getElementById(id);
+  const top=groups.slice().sort((a,b)=>b.leads-a.leads||a.country.localeCompare(b.country))[0];
+  const loan=rows.reduce((s,r)=>s+(r.loanNum||0),0);
+  $('c-k-countries').textContent=groups.length; $('c-k-total').textContent=total;
+  $('c-k-top').textContent=top?top.country+' ('+top.leads+')':'—';
+  $('c-k-new').textContent=rows.filter(r=>(r.status||'').toUpperCase()==='NEW').length;
+  $('c-k-con').textContent=rows.filter(r=>(r.status||'').toUpperCase()==='CONTACTED').length;
+  $('c-k-loan').textContent=fmtINR(loan);
+  const fv=$('c-from').value, tv=$('c-to').value;
+  $('c-note').textContent=(fv||tv)?'Showing leads from '+(fv?shortD(dStart(fv)):'the beginning')+' to '+(tv?shortD(dEnd(tv)):'today')+'.':'Showing all leads (no date filter).';
+  $('c-empty').style.display=total?'none':'block';
+  $('c-wrap-total').style.display=(cView==='total'&&total)?'':'none';
+  $('c-wrap-day').style.display=(cView==='day'&&total)?'':'none';
+  $('cv-total').classList.toggle('on',cView==='total'); $('cv-day').classList.toggle('on',cView==='day');
+
+  const dir=cSortDir==='asc'?1:-1, k=cSortKey;
+  const sorted=groups.slice().sort((a,b)=>{
+    if(k==='country') return a.country.localeCompare(b.country)*dir;
+    let x=a[k],y=b[k]; if(x instanceof Date) x=x.getTime(); if(y instanceof Date) y=y.getTime();
+    if(x==null&&y==null) return 0; if(x==null) return 1; if(y==null) return -1;
+    return (x-y)*dir||a.country.localeCompare(b.country);
+  });
+  const mx=Math.max(1,...groups.map(g=>g.leads));
+  $('c-tbody').innerHTML=sorted.map(g=>`<tr class="crow" data-c="${g.country}"><td><b>${g.country}</b></td><td class="n"><b>${g.leads}</b></td>
+    <td><div class="sharecell"><div class="bar"><i style="width:${(g.leads/mx*100).toFixed(0)}%"></i></div>${(g.leads/total*100).toFixed(1)}%</div></td>
+    <td class="n">${g.nw}</td><td class="n">${g.con}</td><td class="n">${g.oth}</td><td class="n">${g.loan?fmtINR(g.loan):'—'}</td>
+    <td class="n">${g.emi!=null?fmtINR(g.emi):'—'}</td><td>${shortD(g.last)}</td></tr>`).join('');
+  const sm=f=>groups.reduce((a,g)=>a+g[f],0), em=rows.map(r=>r.emiNum).filter(v=>v!=null);
+  $('c-tfoot').innerHTML=`<tr><td>Total</td><td class="n">${total}</td><td>100%</td><td class="n">${sm('nw')}</td><td class="n">${sm('con')}</td><td class="n">${sm('oth')}</td>
+    <td class="n">${loan?fmtINR(loan):'—'}</td><td class="n">${em.length?fmtINR(em.reduce((a,b)=>a+b,0)/em.length):'—'}</td><td></td></tr>`;
+  const {countries,list}=dayMatrix(rows,groups);
+  $('c-day-head').innerHTML='<th>Date</th>'+countries.map(c=>`<th class="n">${c}</th>`).join('')+'<th class="n">Total</th>';
+  $('c-day-body').innerHTML=list.map(d=>`<tr><td><b>${d.label}</b></td>`+countries.map(c=>`<td class="n">${d.c[c]||'·'}</td>`).join('')+`<td class="n"><b>${d.total}</b></td></tr>`).join('');
+  $('c-day-foot').innerHTML='<tr><td>Total</td>'+countries.map(c=>`<td class="n">${groups.find(g=>g.country===c).leads}</td>`).join('')+`<td class="n">${total}</td></tr>`;
+}
+document.querySelectorAll('#tab-country thead th[data-ck]').forEach(th=>th.addEventListener('click',()=>{
+  const k=th.dataset.ck; if(cSortKey===k) cSortDir=cSortDir==='asc'?'desc':'asc'; else { cSortKey=k; cSortDir=k==='country'?'asc':'desc'; }
+  renderCountry();
+}));
+document.getElementById('c-tbody').addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-c]'); if(!tr) return;
+  const name=tr.dataset.c, ds=document.getElementById('f-dest');
+  const opt=[...ds.options].find(o=>o.value && (o.value.toLowerCase().trim()===name.toLowerCase()));
+  ds.value=opt?opt.value:'';
+  document.getElementById('f-status').value=document.getElementById('c-status').value;
+  document.getElementById('f-from').value=document.getElementById('c-from').value;
+  document.getElementById('f-to').value=document.getElementById('c-to').value;
+  document.getElementById('f-q').value=opt?'':(name==='Not specified'?'':name);
+  switchTab('leads'); render();
+});
+function setCView(v){ cView=v; renderCountry(); }
+function switchTab(t){
+  document.querySelectorAll('.tabpanel').forEach(p=>p.classList.toggle('on',p.id==='tab-'+t));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
+  if(t==='country') renderCountry();
+}
+function quickRange(r){
+  const t=new Date(); let f='',to='';
+  if(r==='today'){ f=to=ymd(t); }
+  else if(r==='yesterday'){ const y=new Date(t); y.setDate(y.getDate()-1); f=to=ymd(y); }
+  else if(r==='7'||r==='30'){ const s=new Date(t); s.setDate(s.getDate()-(+r-1)); f=ymd(s); to=ymd(t); }
+  else if(r==='month'){ f=ymd(new Date(t.getFullYear(),t.getMonth(),1)); to=ymd(t); }
+  document.getElementById('c-from').value=f; document.getElementById('c-to').value=to; renderCountry();
+}
+function exportCountryExcel(){
+  const rows=countryRows(), groups=groupByCountry(rows).sort((a,b)=>b.leads-a.leads||a.country.localeCompare(b.country)), total=rows.length;
+  const sum=groups.map(g=>({Country:g.country,Leads:g.leads,'Share %':+(g.leads/total*100).toFixed(1),New:g.nw,Contacted:g.con,Other:g.oth,'Loan Value':g.loan||'','Avg EMI':g.emi!=null?Math.round(g.emi):'','Latest Lead':shortD(g.last)}));
+  sum.push({Country:'TOTAL',Leads:total,'Share %':100,New:groups.reduce((a,g)=>a+g.nw,0),Contacted:groups.reduce((a,g)=>a+g.con,0),Other:groups.reduce((a,g)=>a+g.oth,0),'Loan Value':groups.reduce((a,g)=>a+g.loan,0)||'','Avg EMI':'','Latest Lead':''});
+  const {countries,list}=dayMatrix(rows,groups);
+  const day=list.map(d=>{ const o={Date:d.label,Total:d.total}; countries.forEach(c=>o[c]=d.c[c]||0); return o; });
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(sum),'Country Summary');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(day),'Date x Country');
+  const url=URL.createObjectURL(new Blob([XLSX.write(wb,{bookType:'xlsx',type:'array'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  const a=document.createElement('a'); a.href=url; a.download='voyaz-country-summary-'+ymd(new Date())+'.xlsx'; a.click(); URL.revokeObjectURL(url); toast('Country summary downloaded');
+}
+
+/* ═══════════════ Init ═══════════════ */
+refreshData();
+setInterval(refreshData, CONFIG.REFRESH_INTERVAL_MS);
+</script>
+</body>
+</html>
